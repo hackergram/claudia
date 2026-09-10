@@ -37,6 +37,7 @@
 - [x] User documentation — `docs/` with installation, usage, container-env, agent-tagging, troubleshooting, and filing-issues (issue #10)
 - [x] Coder session index — `claudia index`: agent-agnostic per-session ledger (input/genuine-output/junk tokens + agent + model) from Claude Code JSONL + OpenCode SQLite; content-based summary fallback (issue #12, ADR-006)
 - [x] `Model:` git trailer — `prepare-commit-msg` hook now also records the model, via new `claudia --current-model` (fast, targeted Claude JSONL / opencode.db lookup, no `opencode export`); fixed `claude_dir()` to fall back to `CLAUDE_CONFIG_DIR` (was silently reading nothing in this project's own container setup) (ADR-007)
+- [x] Issue-closing convention — `docs/filing-issues.md` → "Closing issues": `Closes #N` from the PR (or commit body) for work that lands as a change, evidence-bearing triage close (`gh issue close -r <reason> -c ...`) for everything else, and no closing an issue whose governing ADR is still `Proposed`. Mirrored into `CLAUDE.md` → Work tracking and the `project-scaffold` CLAUDE.md template so new `/xpal-src` projects inherit it
 - [ ] OpenCode session integrity — confirm live/partial session rows in `opencode.db` and whether `session` token fields ever lag (watch item)
 - [ ] Multi-machine support — aggregate JSONL from remote machines via SSH or shared mount
 - [ ] Team usage rollup — aggregate by user across a shared workspace (requires Admin API)

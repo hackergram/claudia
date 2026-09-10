@@ -114,6 +114,81 @@ When to use which:
   integration first gets an ADR in `docs/decisions/` — see the contributor
   workflow below.
 
+## Closing issues
+
+An issue closes when the work it describes is **done and evidenced** — never
+silently, and never just because it went quiet. Two paths, and every closed
+issue should have taken one of them.
+
+### 1. Close from the PR — the default when a change lands
+
+Put a GitHub closing keyword in the **PR description**; GitHub closes the issue
+when the PR merges into the default branch:
+
+```markdown
+Closes #42
+Fixes #17
+Resolves #93
+```
+
+- **One keyword per issue.** `Closes #42, #43` closes only #42 — write
+  `Closes #42, closes #43`.
+- **Cross-repo:** spell out the repo — `Closes hackergram/bigaitaskindex#71`.
+- **Partial work:** use `Refs #42` or `Part of #42`. A closing keyword is a
+  claim that the issue is *finished*, not that it was touched.
+- **No PR?** The keyword works in a **commit message body** too. Keep the
+  subject a plain conventional-commit line; keyword in the body, above the
+  trailers:
+
+  ```
+  fix: correct UAE tariff to the HV industrial rate
+
+  DEWA HV industrial AED 0.15/kWh; prior value was the LV commercial rate.
+
+  Closes #58
+
+  Coding-Agent: claude
+  Model: claude-opus-5
+  ```
+
+- The same commit or PR updates `tasks/todo.md` — and the CHANGELOG, ADR status,
+  or claims register where the repo keeps them. GitHub is the tracker;
+  `tasks/todo.md` is the record.
+
+### 2. Close by triage — when no commit ever will
+
+Plenty of issues finish without code: superseded by a refactor, made moot,
+duplicated, answered, or already fixed by a change nobody linked at the time.
+Close those by hand, **with a comment that names the evidence**:
+
+```bash
+gh issue close 58 -r completed \
+  -c "Fixed 2026-06-20 — tariff_usd_kwh 0.054 -> 0.041 in model/data/geographies.yaml; CHANGELOG 2026-06-20; claims-register row 'UAE electricity tariff'."
+
+gh issue close 61 -r "not planned" \
+  -c "Obsolete: the Vast.ai rental row was dropped in the v1.0 refactor (ADR-010). No spot-floor figure remains in the model."
+```
+
+The comment must answer *what landed, where, and how a reader verifies it* — a
+commit or PR link, a CHANGELOG date, an ADR, a file path, a claims-register row.
+"Done" on its own is not a close; it is a dead end for whoever reads the issue
+in a year.
+
+Pick the reason honestly: `completed` for work that happened, `not planned` for
+duplicates, obsolete items, and won't-do. Duplicates close *toward the record* —
+keep the issue with the fuller evidence trail, close the other pointing at it.
+
+### Rules for both paths
+
+- **Never close an issue whose governing ADR is still `Proposed`.** Move the ADR
+  to `Accepted` (or `Superseded`) first, then close — otherwise the decision
+  record and the tracker disagree, and the ADR is the thing people trust.
+- **Sweep on a trigger, not on a mood** — review the open list whenever you cut
+  a release, write a CHANGELOG entry, or finish a phase. A tracker that lags
+  reality stops being read.
+- **Reopening is cheap.** Closing with an honest comment and being wrong is
+  recoverable; leaving 60 finished issues open is not.
+
 ## Contributing / the workflow used here
 
 This repo follows a lightweight process — useful when you submit a PR:
@@ -130,7 +205,10 @@ This repo follows a lightweight process — useful when you submit a PR:
    `chore:`). Every commit should carry a `Coding-Agent:` trailer (see
    [agent-tagging.md](agent-tagging.md)); install the hook with
    `claudia --install-git-hook` before committing.
-5. **Merge via GitHub** — then the branch is deleted locally and on the remote.
+5. **Close the issue from the PR** — put `Closes #N` in the PR description so
+   the merge closes it (see "Closing issues"); `Refs #N` if the PR only moves
+   the issue forward.
+6. **Merge via GitHub** — then the branch is deleted locally and on the remote.
 
 ### Repo conventions to respect in a PR
 
@@ -204,6 +282,8 @@ If during a chat loop you discover data that affects a Proposed ADR:
 3. **Document** — file issues for new evidence, comment on ADRs
 4. **Propose** — suggest updates to the ADR based on evidence
 5. **Implement** — once decision is accepted, update model/data and tests
-6. **Verify** — run tests, update claims-register.md, close related issues
+6. **Verify** — run tests, update claims-register.md, and close related issues
+   with evidence (`Closes #N` in the PR, or a triage close naming what landed —
+   see "Closing issues")
 
 This ensures multi-contributor reflection and that evidence-based decisions are traceable.
