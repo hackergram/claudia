@@ -10,7 +10,7 @@ broader suite of Claude self-analysis and observability tools.
 
 The installed binary lives on `PATH` (`~/.local/bin/claudia` via `uv tool install
 --editable .`, or `/usr/local/bin/claudia` where that's writable). The source is the
-single file `/xpal-src/claudia/claudia.py` (`.py` extension required for Python
+single file `claudia.py` at the repo root (`.py` extension required for Python
 packaging).
 
 ## Repository layout
@@ -70,6 +70,20 @@ efforts; `tasks/todo.md` is the local record (ADR + issue links). For
 cross-repo or multi-machine phases, use a GitHub Project board. Full guidance:
 `docs/filing-issues.md` → "How work is tracked here".
 
+**Closing issues** — always with evidence, never silently:
+
+- Work that lands as a change → `Closes #N` (one keyword per issue) in the PR
+  description, or in the commit body above the trailers when there is no PR.
+  `Refs #N` for partial work. The same change updates `tasks/todo.md`.
+- Anything no commit will close (superseded, obsolete, duplicate, already
+  fixed) → close by triage with a comment naming what landed and where:
+  `gh issue close N -r completed -c "<commit/ADR/CHANGELOG + file path>"`.
+  Use `-r "not planned"` for duplicates, obsolete items, and won't-do.
+- Never close an issue whose governing ADR is still `Proposed` — flip the ADR
+  first. Sweep the open list at each release, CHANGELOG entry, or phase end.
+
+Full guidance: `docs/filing-issues.md` → "Closing issues".
+
 ## Coding standards
 
 - Python 3.10+. Use `match` where it reads better than `if/elif` chains.
@@ -89,10 +103,11 @@ Environmental and pricing constants live at the top of `claudia`:
 | `WATER_L_PER_KWH` | Li et al. 2023 | Significant WUE improvements |
 | `CARBON_KG_PER_KWH` | EPA / Ember annual grid report | Annually |
 
-After updating constants, reinstall so the `claudia` on `PATH` picks up the change:
+After updating constants, reinstall so the `claudia` on `PATH` picks up the change
+(run from the repo root):
 ```bash
-uv tool install --editable /xpal-src/claudia   # symlinked entry point — usually no-op
-cp /xpal-src/claudia/claudia.py /usr/local/bin/claudia  # if installed there instead
+uv tool install --editable .   # symlinked entry point — usually no-op
+cp claudia.py /usr/local/bin/claudia  # if installed there instead
 ```
 
 ## Verifying against the Anthropic Admin API

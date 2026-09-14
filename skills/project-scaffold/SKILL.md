@@ -65,6 +65,8 @@ If creating files by hand, follow these.
 ## Conventions
 - Write an ADR for any non-obvious design or scope decision.
 - Track work in tasks/todo.md; record gotchas in tasks/lessons.md.
+- Close issues with evidence: Closes #N in the PR (or commit body); otherwise a
+  triage close naming what landed and where. Never close on a Proposed ADR.
 
 ## Git workflow
 - Conventional commits: feat:, fix:, docs:, chore:.

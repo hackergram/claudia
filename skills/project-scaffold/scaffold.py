@@ -47,6 +47,13 @@ CLAUDE_MD = """# {name} — development guidelines
 - Write an ADR in `docs/decisions/` for any non-obvious design or scope decision
   (format: Status / Context / Decision / Consequences; numbered `ADR-NNN-kebab-title.md`).
 - Track work in `tasks/todo.md`; record gotchas in `tasks/lessons.md`.
+- Close issues with evidence, never silently: `Closes #N` (one keyword per
+  issue) in the PR description — or in the commit body above the trailers when
+  there is no PR; `Refs #N` for partial work. Anything no commit will close
+  (superseded, obsolete, duplicate) gets a triage close naming what landed and
+  where: `gh issue close N -r completed -c "<commit/ADR/CHANGELOG + path>"`
+  (`-r "not planned"` for duplicates and won't-do). Never close an issue whose
+  governing ADR is still `Proposed` — flip the ADR first.
 
 ## Git workflow
 - Conventional commits: `feat:`, `fix:`, `docs:`, `chore:`.
