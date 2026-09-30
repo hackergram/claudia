@@ -160,7 +160,36 @@ containers use `--rm` and need no cleanup.
 - OpenCode (`opencode-ai`) — run with `opencode`
 - Python toolchain: `uv` (owns Python — no apt python3), a uv-managed CPython
   exposed as `python`/`python3`, and `ipython` as a uv tool
+- [ophio](https://github.com/hackergram/ophio) — drives the **host's** Chrome
+  from inside the container over the DevTools protocol (see below)
 - A non-root `coder` user
+
+## Browser automation (ophio)
+
+The container has no browser, and installing a headless one rootlessly is a
+multi-hour dead end (no root for `apt`, no fonts, no display server). `ophio`
+sidesteps that by driving the Chrome already running on your Mac, over CDP via
+`host.containers.internal`. It is pre-installed and `OPHIO_CDP_URL` is
+pre-set, so the only step is starting Chrome on the host with its debug port
+open:
+
+```bash
+# in the container — prints the command to run on the host, and checks it
+ophio host-cmd
+ophio doctor
+
+# then
+ophio open https://example.com
+ophio snapshot
+ophio close
+```
+
+The `--user-data-dir` in the printed command is not optional: without it an
+already-running Chrome ignores the flags and never opens the port.
+
+Pin a version at build time with `--build-arg OPHIO_REF=v0.1.0`. Full docs
+live in the ophio repo; `ophio doctor` diagnoses each layer separately when
+something is wrong.
 
 ## Requirements
 
