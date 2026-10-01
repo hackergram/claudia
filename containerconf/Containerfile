@@ -72,27 +72,27 @@ RUN uv python install --default
 RUN uv tool install ipython
 
 # --- ophio: drive the host's Chrome from inside the container -------------
-# The browser itself runs on the HOST. ophio only speaks the DevTools Protocol
-# to it over host.containers.internal, so this pulls in the CLI plus
-# playwright-core and nothing else — no Chromium download, no GUI system
-# libraries, no root. That is the whole reason it can be baked in here.
+# ophio speaks the DevTools Protocol to a Chrome running on the HOST, so it
+# needs only playwright-core — no Chromium download, no GUI system libraries,
+# no root. Installing it takes about a second.
 #
-# Ordering matters twice over: it runs as `coder` (not root) so the install
-# lands in ~/.local, which is already on PATH; and it runs *after*
-# `uv python install` because the generated shim pins whichever python3 is on
-# PATH at install time — this image has no apt python3 to fall back on.
+# It is installed by entrypoint.sh at container start, NOT here, because
+# hackergram/ophio is private and an image build has no credentials. By
+# entrypoint time /xpal-src is mounted, so the source is simply there. The
+# install is idempotent and checksum-skipped, so a normal start pays nothing.
 #
-# Requires github.com/hackergram/ophio to be pushed. To build against a fork or
-# a pinned tag:  podman build --build-arg OPHIO_REF=v0.1.0 ...
-ARG OPHIO_REPO=https://github.com/hackergram/ophio
-ARG OPHIO_REF=main
-RUN curl -fsSL "${OPHIO_REPO}/raw/${OPHIO_REF}/install.sh" \
-      | OPHIO_REPO="${OPHIO_REPO}" OPHIO_REF="${OPHIO_REF}" sh
+# Two constraints that entrypoint.sh relies on: the install must run as
+# `coder` (landing in ~/.local, already on PATH), and after `uv python
+# install` above — the generated shim pins whichever python3 exists at install
+# time, and this image has no apt python3 to fall back on.
 
 # Where ophio looks for the host's Chrome. Override per run with
 # `-e OPHIO_CDP_URL=http://host.docker.internal:9222` (Docker Desktop) or a
 # forwarded address on a Linux host — see ophio's docs/host-chrome.md.
 ENV OPHIO_CDP_URL=http://host.containers.internal:9222
+# Where entrypoint.sh looks for the ophio source; defaults to a scan of
+# /xpal-src/*/ophio when unset.
+ENV OPHIO_SRC=""
 
 # Init auth dirs (via entrypoint), then drop into zsh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

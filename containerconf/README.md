@@ -161,7 +161,8 @@ containers use `--rm` and need no cleanup.
 - Python toolchain: `uv` (owns Python — no apt python3), a uv-managed CPython
   exposed as `python`/`python3`, and `ipython` as a uv tool
 - [ophio](https://github.com/hackergram/ophio) — drives the **host's** Chrome
-  from inside the container over the DevTools protocol (see below)
+  from inside the container over the DevTools protocol (see below);
+  installed at start from `/xpal-src`, not baked into the image
 - A non-root `coder` user
 
 ## Browser automation (ophio)
@@ -169,9 +170,17 @@ containers use `--rm` and need no cleanup.
 The container has no browser, and installing a headless one rootlessly is a
 multi-hour dead end (no root for `apt`, no fonts, no display server). `ophio`
 sidesteps that by driving the Chrome already running on your Mac, over CDP via
-`host.containers.internal`. It is pre-installed and `OPHIO_CDP_URL` is
-pre-set, so the only step is starting Chrome on the host with its debug port
-open:
+`host.containers.internal`.
+
+`entrypoint.sh` installs it from `/xpal-src/*/ophio` on container start —
+about a second, and skipped entirely (a checksum) when nothing changed. It is
+not baked into the image because the ophio repo is private and an image build
+has no credentials. Point it elsewhere with `-e OPHIO_SRC=/path/to/ophio`; if
+the source is missing the container still starts normally, just without
+`ophio`.
+
+`OPHIO_CDP_URL` is pre-set, so the only real step is starting Chrome on the
+host with its debug port open:
 
 ```bash
 # in the container — prints the command to run on the host, and checks it
@@ -187,9 +196,9 @@ ophio close
 The `--user-data-dir` in the printed command is not optional: without it an
 already-running Chrome ignores the flags and never opens the port.
 
-Pin a version at build time with `--build-arg OPHIO_REF=v0.1.0`. Full docs
-live in the ophio repo; `ophio doctor` diagnoses each layer separately when
-something is wrong.
+Full docs live in the ophio repo; `ophio doctor` diagnoses each layer
+separately when something is wrong, and `/tmp/ophio-install.log` has the
+install output if the CLI is missing entirely.
 
 ## Requirements
 
