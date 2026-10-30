@@ -29,7 +29,7 @@ Bugs, feature requests, and questions all go to the repo's GitHub Issues:
 ## What to paste — and what never to paste
 
 **Do include:** the exact command, the full error text, and any redacted config
-(e.g. `.env` with secrets blanked: `XPAL_HOST_UID=1000`, `XPAL_PORTS="..."`).
+(e.g. `.env` with secrets blanked: `XPAL_PORTS="..."`, `XPAL_AS_CODER=1`).
 
 **Never paste:** API keys (`sk-ant-...`, `sk-ant-admin-...`), `~/.claude/.credentials.json`, git
 credential tokens, raw session JSONL, or personal prompts. Session logs contain

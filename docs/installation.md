@@ -55,7 +55,7 @@ See [container-env.md](container-env.md) for the full guide. In short:
 
 ```bash
 cd containerconf
-./setup.sh          # guided: paths, UID, runtime, ports -> writes containerconf/.env
+./setup.sh          # guided: paths, runtime, ports -> writes containerconf/.env
 ./build.sh          # build the image from the Containerfile
 ./run-daily.sh      # create and enter the day-to-day container
 ```

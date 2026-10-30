@@ -54,3 +54,34 @@
   returned `unknown` when the live JSONL clearly had the data. Worth periodically sanity
   checking claudia's own commands actually see data in whatever environment they're
   supposedly supported in, rather than trusting that passing tests means it works live.
+
+## 2026-10-29 — container root default + pinning (ADR-008, ADR-009)
+
+- **A new committed file can be silently gitignored.** The repo's `.gitignore` has `*.env`
+  (to catch `.env.<machine>` files), which also matched the new `containerconf/versions.env`.
+  `git status` just didn't list it — a build on another machine would have failed for a
+  missing file. Caught with `git check-ignore -v`; fixed with a narrow `!containerconf/versions.env`.
+  Check `git status --ignored` for any new file that is meant to be committed.
+- **`oh-my-zsh` has no release tags, and its installer can only clone a branch.** Pinning it
+  means fetching an exact commit yourself (`git fetch --depth 1 origin <sha>`) and starting from
+  `templates/zshrc.zsh-template`. `uv` and `gh`, by contrast, have versioned installer URLs / release
+  assets with published checksums.
+- **ophio's installer picks its prefix by user** (`/usr/local` as root, `~/.local` otherwise), so any
+  "already installed?" check in `entrypoint.sh` has to mirror that rule or it reinstalls on every
+  start. Changing the container user silently changes where tools land (`HOME`, `PATH`).
+- **Cached layers hide "latest".** Unpinned `curl | sh` and `npm install -g` layers are frozen by the
+  build cache, so the installed versions depended on build history and the running image had
+  drifted from the Containerfile (a CLI in the file was missing from the image, and a second
+  Claude Code install sat at a different version). Pinning plus `/etc/xpal-versions` makes drift visible.
+- **`scripts/scrub-public.sh` already fails on `main`** (12 critical hits at the start of this change,
+  before any edit) — see the PR for the before/after count. The repo is public, so this needs its own
+  cleanup; it is not part of the container change.
+- **Found while sweeping `/xpal-src`, not fixed here (other repos):** `bigaitaskindex`
+  (`model/observed.py:35`, `model/index.py:133`) builds its ledger path from `Path.home()/.claude`,
+  ignoring `CLAUDE_CONFIG_DIR`, so in the container it reads/writes the wrong place for both users.
+  `xetrapal3` scripts default `XPAL_DATA` to `$HOME/xpal-data`; the image now sets `XPAL_DATA=/xpal-data`.
+  Several scripts with shebangs are committed as mode 644 (e.g. `mojogoat/goatctl.sh`,
+  `xetrapal3/scripts/start_local.sh`) and `mojogoat/startmojogoat.sh` is 755 with no shebang.
+- **No container runtime was available** where this was implemented. Shell logic, argument plumbing
+  (against a stub runtime), the `gh` download/checksum/extract steps, the oh-my-zsh commit fetch and the
+  upstream URLs/digest were checked; the image build itself was not. First build on a real host is the test.

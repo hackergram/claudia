@@ -1,9 +1,10 @@
 # Containerized dev environment
 
 A minimal, containerized [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) +
-[OpenCode](https://opencode.ai) environment on Debian 12 slim, running as a
-non-root user with all credentials in a mounted host folder (never in the
-image). Both agents are on PATH — `claude` or `opencode`, whichever you want in
+[OpenCode](https://opencode.ai) environment on Debian 12 slim, running as root
+by default (your host user under rootless Podman; see ADR-008) with an opt-in
+non-root `coder` fallback, and all credentials in a mounted host folder (never
+in the image). Both agents are on PATH — `claude` or `opencode`, whichever you want in
 a given session.
 
 > The authoritative, current reference is `containerconf/README.md`. This page
@@ -14,6 +15,7 @@ a given session.
 ```
 containerconf/
 ├── Containerfile      # image definition — the source of truth
+├── versions.env       # committed toolchain pins, passed to the build (ADR-009)
 ├── entrypoint.sh      # runs on container start
 ├── .env.example       # documents the config keys (never sourced)
 ├── .env               # YOUR machine-specific config — gitignored, generated
@@ -29,14 +31,14 @@ containerconf/
 
 ```bash
 cd containerconf
-./setup.sh        # guided: folders, UID, runtime, ports -> containerconf/.env
+./setup.sh        # guided: folders, runtime, ports -> containerconf/.env
 ./build.sh        # build the image from the Containerfile
 ./run-daily.sh    # create and enter the day-to-day container
 ```
 
 `setup.sh` prompts for each setting with a sensible default (host folders
-default to `~/xpal-src`, `~/xpal-data`, `~/xpal-auth`; UID defaults to your
-`id -u`; runtime auto-detects podman → docker), creates the folders, and writes
+default to `~/xpal-src`, `~/xpal-data`, `~/xpal-auth`; runtime auto-detects
+podman → docker), creates the folders, and writes
 `containerconf/.env`. Re-run it any time to change paths, ports, or names — the
 next container you create picks them up. For unattended setup:
 
@@ -55,9 +57,13 @@ XPAL_HOST_SRC="$HOME/code" ./setup.sh --yes
 | `XPAL_HOST_SRC` | `~/xpal-src` | Host code folder → `/xpal-src` |
 | `XPAL_HOST_DATA` | `~/xpal-data` | Host data folder → `/xpal-data` |
 | `XPAL_HOST_AUTH` | `~/xpal-auth` | Host credentials folder → `/xpal-auth` |
-| `XPAL_HOST_UID` | `id -u` | UID for the container's `coder` user |
 | `XPAL_PORTS` | `5001:5001 8001:8001 8080:8080` | Ports to publish to the host |
 | `XPAL_HOST_REMOTE_DIR` | *(empty)* | Default remote (SharePoint) folder |
+| `XPAL_AS_CODER` | `0` | Set to `1` to run as the non-root `coder` fallback instead of root (not written by `setup.sh`; applies when the container is created) |
+
+Tool versions are not in `.env`: they are pinned in the committed
+`versions.env`, and `./build.sh` prints what each build installed (ADR-009).
+An older `.env` may still hold `XPAL_HOST_UID`; it is no longer used.
 
 `.env` is machine-specific and gitignored — never commit it. `.env.example`
 documents the shape and is committed on purpose.
@@ -111,7 +117,7 @@ Containerfile, so they persist on the host and never enter the image:
 - **npm** — `NPM_CONFIG_USERCONFIG=/xpal-auth/npm/npmrc`.
 
 For SSH-based git, add a fourth mount onto the standard path
-(`-v ~/xpal-auth/ssh:/home/coder/.ssh:Z`).
+(`-v ~/xpal-auth/ssh:/root/.ssh:Z`; `/home/coder/.ssh` in `XPAL_AS_CODER` mode).
 
 ## Ports
 
@@ -151,7 +157,11 @@ git. Ephemeral containers use `--rm` and need no cleanup.
 - Claude Code (`claude`) and OpenCode (`opencode`)
 - Python via `uv` (uv-managed CPython exposed as `python`/`python3`, plus
   `ipython` as a uv tool) — no apt python3
-- A non-root `coder` user
+- GitHub CLI (`gh`), `jq`, an `ssh` client, and claudia itself (installed at
+  start from the mounted source)
+- Runs as root by default, so `apt` and root-only installers work; an opt-in
+  non-root `coder` user exists for tools that refuse root. See
+  `containerconf/README.md` → "Root, and the `coder` fallback"
 
 ## Requirements
 
