@@ -10,6 +10,9 @@ a given session.
 > The authoritative, current reference is `containerconf/README.md`. This page
 > is the getting-started overview plus the pieces most people trip over.
 
+> **Upgraded Podman, or need to recreate containers?** The step-by-step is at the
+> top of `containerconf/README.md` ("After a Podman upgrade").
+
 ## Layout
 
 ```

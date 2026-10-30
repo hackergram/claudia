@@ -16,6 +16,60 @@ Everything machine-specific — host folders, runtime, ports, names — comes
 from `containerconf/.env`, generated once by `./setup.sh` (see below). The
 scripts never hardcode your paths.
 
+## After a Podman upgrade (or whenever containers must be recreated)
+
+Containers are tied to the Podman that created them, so a major upgrade can
+leave existing ones unusable. Your **host folders are untouched** (`xpal-src`,
+`xpal-data`, `xpal-auth` — code, data, and credentials all live there). What is
+lost is anything that lived only inside the old container: hand-installed
+packages and `/tmp`. Run these **on the host**, from `containerconf/`:
+
+```bash
+# 1. Is Podman healthy? On macOS the machine may need starting (or re-creating
+#    if the upgrade replaced it).
+podman --version
+podman machine list                 # want one machine, "Currently running"
+podman machine start                # if it isn't running
+
+# 2. Optional, before you lose it: see what you hand-installed in the old
+#    container, so you can promote keepers into the Containerfile.
+podman diff xpal-dev                # skip if the container is already gone
+
+# 3. Get the current scripts and pins.
+git pull
+
+# 4. Build. Reads versions.env, builds, and prints every installed version.
+#    Add --no-cache for fresh Debian packages. If a container named xpal-dev
+#    exists it offers to remove it — answer y.
+./build.sh
+
+# 5. Remove the remote-track container too, if you use it. build.sh only
+#    offers to recreate the plain one.
+podman rm -f xpal-dev-remote        # skip if you don't use run-daily-remote.sh
+
+# 6. Create and enter the new container.
+./run-daily.sh                      # or ./run-daily-remote.sh "/path/to/remote"
+```
+
+No `./setup.sh` needed — your `.env` still works (an old `XPAL_HOST_UID` line in
+it is ignored). Re-run `./setup.sh` only if `.env` is missing. If the upgrade
+also wiped your images, step 4 simply rebuilds them.
+
+**Check it worked** (inside the new container):
+
+```bash
+cat /etc/xpal-versions              # what this build actually contains
+id                                  # uid=0(root) — the default
+claude --version && ophio doctor && claudia --current-model
+touch /xpal-data/.owner-check       # then on the HOST: ls -ln ~/xpal-data/.owner-check
+```
+
+The file should be owned by **your** host user, not root; delete it afterward.
+If it is root-owned you are on a rootful runtime — see "Root, and the `coder`
+fallback" below. The first start also installs `ophio` and `claudia` from
+`/xpal-src` (needs network once); `claude` will ask you to log in only if
+`xpal-auth` was lost.
+
 ## Get started
 
 ```bash
