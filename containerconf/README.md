@@ -60,13 +60,13 @@ also wiped your images, step 4 simply rebuilds them.
 ```bash
 cat /etc/xpal-versions              # what this build actually contains
 id                                  # uid=0(root) — the default
-claude --version && ophio doctor && claudia --current-model
+claude --version && claudia --current-model
 touch /xpal-data/.owner-check       # then on the HOST: ls -ln ~/xpal-data/.owner-check
 ```
 
 The file should be owned by **your** host user, not root; delete it afterward.
 If it is root-owned you are on a rootful runtime — see "Root, and the `coder`
-fallback" below. The first start also installs `ophio` and `claudia` from
+fallback" below. The first start also installs a few tools from the mounted
 `/xpal-src` (needs network once); `claude` will ask you to log in only if
 `xpal-auth` was lost.
 
