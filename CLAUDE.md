@@ -36,7 +36,9 @@ claudia/
 │       ├── ADR-004-guided-portable-setup.md
 │       ├── ADR-005-agent-git-trailers.md
 │       ├── ADR-006-coder-session-index.md
-│       └── ADR-007-agent-model-trailer.md
+│       ├── ADR-007-agent-model-trailer.md
+│       ├── ADR-008-container-runs-as-root.md
+│       └── ADR-009-container-toolchain-pinning.md
 ├── tasks/
 │   ├── todo.md              # Current and upcoming work
 │   └── lessons.md           # Dated discoveries and gotchas
@@ -132,6 +134,10 @@ API integration approach. Key decisions:
 - ADR-003: Anthropic Admin API for cross-verification
 - ADR-006: Coder session index (`claudia index`) — agent-agnostic per-session
   token ledger; read it before touching the ledger schema or counting logic
+- ADR-008: The dev container runs as root by default (`coder` is an opt-in
+  fallback) — read it before changing the container's user or mount handling
+- ADR-009: Container toolchain is pinned in `containerconf/versions.env`; builds
+  record what they contain — bump pins there, not in the Containerfile
 
 ### Chat loop workflow for ADR decisions
 

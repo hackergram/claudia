@@ -48,7 +48,6 @@ prompt() {
 }
 
 # --- defaults -------------------------------------------------------------
-DEFAULT_UID="$(id -u)"
 DEFAULT_RUNTIME="$(detect_runtime)"
 DEFAULT_REMOTE="${XPAL_HOST_REMOTE_DIR:-}"
 
@@ -59,7 +58,6 @@ XPAL_CONTAINER_REMOTE="${XPAL_CONTAINER_REMOTE:-xpal-dev-remote}"
 XPAL_HOST_SRC="${XPAL_HOST_SRC:-$HOME/xpal-src}"
 XPAL_HOST_DATA="${XPAL_HOST_DATA:-$HOME/xpal-data}"
 XPAL_HOST_AUTH="${XPAL_HOST_AUTH:-$HOME/xpal-auth}"
-XPAL_HOST_UID="${XPAL_HOST_UID:-$DEFAULT_UID}"
 XPAL_PORTS="${XPAL_PORTS:-5001:5001 8001:8001 8080:8080}"
 
 echo "== xpal-claudia setup =="
@@ -72,7 +70,6 @@ prompt XPAL_CONTAINER_REMOTE  "$XPAL_CONTAINER_REMOTE"  "Day-to-day+remote conta
 prompt XPAL_HOST_SRC          "$XPAL_HOST_SRC"          "Host folder for code      "
 prompt XPAL_HOST_DATA         "$XPAL_HOST_DATA"         "Host folder for data      "
 prompt XPAL_HOST_AUTH         "$XPAL_HOST_AUTH"         "Host folder for credentials"
-prompt XPAL_HOST_UID          "$XPAL_HOST_UID"          "Host user UID (id -u)"
 prompt XPAL_PORTS             "$XPAL_PORTS"             "Published ports (host:container, space-separated)"
 prompt XPAL_HOST_REMOTE_DIR   "$DEFAULT_REMOTE"         "Optional synced remote folder (blank = none)"
 
@@ -81,11 +78,6 @@ resolve() { case "$1" in /*) echo "$1";; *) echo "$(cd "$1" && pwd)";; esac; }
 XPAL_HOST_SRC="$(resolve "$XPAL_HOST_SRC")"
 XPAL_HOST_DATA="$(resolve "$XPAL_HOST_DATA")"
 XPAL_HOST_AUTH="$(resolve "$XPAL_HOST_AUTH")"
-
-# Validate the UID looks numeric before writing it.
-case "$XPAL_HOST_UID" in
-  ''|*[!0-9]*) echo "Error: XPAL_HOST_UID must be a number, got '$XPAL_HOST_UID'." >&2; exit 1;;
-esac
 
 # --- write the config -----------------------------------------------------
 cat > "$ENV_FILE" <<EOF
@@ -99,7 +91,6 @@ XPAL_CONTAINER_REMOTE=$XPAL_CONTAINER_REMOTE
 XPAL_HOST_SRC=$XPAL_HOST_SRC
 XPAL_HOST_DATA=$XPAL_HOST_DATA
 XPAL_HOST_AUTH=$XPAL_HOST_AUTH
-XPAL_HOST_UID=$XPAL_HOST_UID
 XPAL_PORTS="$XPAL_PORTS"
 XPAL_HOST_REMOTE_DIR="$XPAL_HOST_REMOTE_DIR"
 EOF

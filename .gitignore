@@ -9,6 +9,8 @@ dist/
 .env*
 *.env
 !.env.example
+# Committed toolchain pins (no secrets) — would otherwise match *.env above.
+!containerconf/versions.env
 
 # Machine-local / OS state — never commit
 .DS_Store
