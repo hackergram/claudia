@@ -2,16 +2,17 @@
 
 A minimal, containerized
 [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) +
-[OpenCode](https://opencode.ai) environment on Debian slim. Runs as a non-root
-user, uses zsh + oh-my-zsh, and keeps all credentials in a mounted host folder
-(never in the image). Both agents are on PATH — `claude` or `opencode`,
+[OpenCode](https://opencode.ai) environment on Debian slim. Runs as root by
+default (under rootless Podman that is *your* host user — see ADR-008) with an
+opt-in non-root `coder` fallback, uses zsh + oh-my-zsh, and keeps all
+credentials in a mounted host folder (never in the image). Both agents are on PATH — `claude` or `opencode`,
 whichever you want to work in for a given session.
 
 The **Containerfile is the source of truth.** The image is rebuilt from it; you
 never `podman commit` a running container into your build chain. Both run modes
 below start from the same freshly built image.
 
-Everything machine-specific — host folders, UID, runtime, ports, names — comes
+Everything machine-specific — host folders, runtime, ports, names — comes
 from `containerconf/.env`, generated once by `./setup.sh` (see below). The
 scripts never hardcode your paths.
 
@@ -25,13 +26,60 @@ cd containerconf
 ```
 
 `./setup.sh` prompts for each setting with a sensible default (host folders
-default to `~/xpal-src`, `~/xpal-data`, `~/xpal-auth`; UID defaults to your
-`id -u`; runtime auto-detects podman → docker). It creates the folders and
-writes the config. Re-run it any time to change paths, ports, or names — the
+default to `~/xpal-src`, `~/xpal-data`, `~/xpal-auth`; runtime auto-detects
+podman → docker). It creates the folders and writes the config. Re-run it any time to change paths, ports, or names — the
 next container you create picks them up. `.env` is machine-specific and
 gitignored; never commit it. See `.env.example` for the full key list.
 
 For unattended setup: `XPAL_HOST_SRC="$HOME/code" ./setup.sh --yes`.
+
+An older `.env` may still contain `XPAL_HOST_UID`; it is no longer used and can
+be deleted.
+
+## Versions and pinning
+
+Every tool version in the image is pinned in one committed file,
+`versions.env` (base image by digest, Node major, Claude Code, OpenCode, `gh`,
+`uv`, Python, IPython, oh-my-zsh commit — ADR-009). `./build.sh` reads it,
+passes each value to the Containerfile, and **prints the versions actually
+installed** when the build finishes (also in the image at `/etc/xpal-versions`;
+the full Debian package list is in `/etc/xpal-apt-manifest`).
+
+```bash
+./build.sh                          # build exactly what versions.env says
+./build.sh --no-cache               # same pins, but refresh Debian packages
+CLAUDE_CODE_VERSION=2.2.0 ./build.sh   # try a different version for one build
+```
+
+To bump a pin, edit `versions.env`, rebuild, and read the printed list. Always
+build with `./build.sh` — a bare `podman build` has no build args and the
+Containerfile will stop with a message saying so. Debian packages are
+deliberately unpinned: the base-image digest fixes the snapshot they come from.
+
+## Root, and the `coder` fallback
+
+The container runs as **root** by default, so you can `apt-get install`,
+install system packages, and run root-only installers inside it. Under
+*rootless* Podman, container root is mapped to your host user: the bind mounts
+are writable and files created in them are owned by you on the host. Don't use
+this with a rootful runtime — there, root in the container is root on the host
+and files in the mounts end up root-owned.
+
+Some tools refuse to run as root. For those, the image also has a `coder` user
+(fixed UID 1000, not tied to your host UID). Create the container with
+`XPAL_AS_CODER=1` to run as it:
+
+```bash
+XPAL_AS_CODER=1 ./run-daily.sh      # only applies when the container is created
+```
+
+That adds `--user coder --userns=keep-id:uid=1000,gid=1000`, which maps your
+host user onto `coder` so the mounts stay writable. `coder` has the system-level
+tools (Node, the npm CLIs, git, `gh`, `rg`, `jq`) but not the `uv`-managed
+Python, which lives under root's home. To switch, remove the container
+(`./cleanup.sh`) and recreate it. For a one-off non-root shell in a root
+container, `podman exec -it -u coder xpal-dev zsh` works for anything that
+doesn't need to write the mounts.
 
 ## Two run tracks
 
@@ -88,9 +136,10 @@ set the folder to "always keep on this device."
 Host folders are chosen per machine by `./setup.sh`; the container-side paths
 are fixed.
 
-`--userns=keep-id` (set in both run scripts) maps the container's `coder` user
-to your host user so it can read/write the bind-mounted host folders under
-rootless Podman. Without it you'll get permission errors on the mounts.
+Under rootless Podman, the default (root) user maps to your host user, so the
+mounts are readable and writable with no extra flags. In `XPAL_AS_CODER=1` mode
+the run scripts add `--userns=keep-id:uid=1000,gid=1000` to do the same for the
+`coder` user.
 
 ## Ports
 
@@ -119,7 +168,7 @@ the Containerfile, so they persist on the host and never enter the image:
 - **npm** — `NPM_CONFIG_USERCONFIG=/xpal-auth/npm/npmrc`.
 
 For SSH-based git, add a fourth mount onto the standard path, e.g.
-`-v ~/xpal-auth/ssh:/home/coder/.ssh:Z`.
+`-v ~/xpal-auth/ssh:/root/.ssh:Z` (`/home/coder/.ssh` in `XPAL_AS_CODER` mode).
 
 **Never commit credentials.** The `.gitignore` excludes common secret files;
 credentials live in the mounted host folder, not the repo or the image.
@@ -163,7 +212,12 @@ containers use `--rm` and need no cleanup.
 - [ophio](https://github.com/hackergram/ophio) — drives the **host's** Chrome
   from inside the container over the DevTools protocol (see below);
   installed at start from `/xpal-src`, not baked into the image
-- A non-root `coder` user
+- GitHub CLI (`gh`), `jq`, and an `ssh` client
+- [claudia](https://github.com/hackergram/claudia) itself, installed (editable)
+  at start from `/xpal-src/*/claudia` so the commit-trailer hook can record the
+  model — skipped if no checkout is mounted
+- Runs as root by default; a non-root `coder` user is the opt-in fallback
+  (see "Root, and the `coder` fallback")
 
 ## Browser automation (ophio)
 
@@ -197,8 +251,8 @@ The `--user-data-dir` in the printed command is not optional: without it an
 already-running Chrome ignores the flags and never opens the port.
 
 Full docs live in the ophio repo; `ophio doctor` diagnoses each layer
-separately when something is wrong, and `/tmp/ophio-install.log` has the
-install output if the CLI is missing entirely.
+separately when something is wrong, and `/tmp/ophio-install-<uid>.log`
+(`-0` as root) has the install output if the CLI is missing entirely.
 
 ## Requirements
 

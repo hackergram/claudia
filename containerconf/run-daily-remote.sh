@@ -59,7 +59,7 @@ fi
 
 echo "Creating day-to-day+remote container '$CONTAINER'..."
 exec "$XPAL_RUNTIME" run -it --name "$CONTAINER" \
-  --userns=keep-id \
+  ${USER_ARGS[@]+"${USER_ARGS[@]}"} \
   "${PORT_ARGS[@]}" \
   "${MOUNTS[@]}" \
   "$IMAGE"

@@ -25,7 +25,7 @@ fi
 
 echo "Creating day-to-day container '$CONTAINER'..."
 exec "$XPAL_RUNTIME" run -it --name "$CONTAINER" \
-  --userns=keep-id \
+  ${USER_ARGS[@]+"${USER_ARGS[@]}"} \
   "${PORT_ARGS[@]}" \
   -v "$XPAL_HOST_SRC":/xpal-src:Z \
   -v "$XPAL_HOST_DATA":/xpal-data:Z \

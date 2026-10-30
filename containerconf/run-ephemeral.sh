@@ -44,7 +44,7 @@ else
 fi
 
 exec "$XPAL_RUNTIME" run -it --rm \
-  --userns=keep-id \
+  ${USER_ARGS[@]+"${USER_ARGS[@]}"} \
   "${PORT_ARGS[@]}" \
   "${MOUNTS[@]}" \
   "$IMAGE"
