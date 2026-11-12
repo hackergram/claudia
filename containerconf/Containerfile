@@ -1,35 +1,68 @@
-# Base image — Debian 12 "bookworm", slim variant (no docs/extras)
-FROM docker.io/library/debian:bookworm-slim
+# Every version below arrives as a build arg from versions.env via build.sh —
+# build with ./build.sh, not a bare `podman build`. See ADR-009.
 
-# Install Node.js 20 LTS, the tools Claude Code wants, and zsh
-RUN apt-get update \
+# Base image, pinned by digest (value lives in versions.env).
+ARG DEBIAN_IMAGE
+FROM ${DEBIAN_IMAGE}
+
+# --- System tools, Node.js, and the agent CLIs -----------------------------
+# Debian packages float (the base digest fixes the snapshot). Node's major comes
+# from NodeSource; the CLIs are pinned to exact versions.
+#   jq              — ophio output is routinely piped into it
+#   openssh-client  — the documented ~/.ssh mount is useless without ssh
+ARG NODE_MAJOR
+ARG CLAUDE_CODE_VERSION
+ARG OPENCODE_VERSION
+RUN : "${NODE_MAJOR:?pass --build-arg via ./build.sh (see versions.env)}" \
+        "${CLAUDE_CODE_VERSION:?}" "${OPENCODE_VERSION:?}" \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl ca-certificates git ripgrep zsh \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+        curl ca-certificates git ripgrep zsh jq openssh-client \
+    && curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g @anthropic-ai/claude-code opencode-ai \
+    && npm install -g \
+        "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+        "opencode-ai@${OPENCODE_VERSION}" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user with zsh as the login shell.
+# GitHub CLI. The mojogoat-ui pre-push guard skips its public-repo `npm audit`
+# check when `gh` is missing, so without this it is silently a no-op. Taken from
+# the release tarball (not Debian's older package) and verified against the
+# checksum file published with that release.
+ARG GH_VERSION
+RUN : "${GH_VERSION:?}" \
+    && arch="$(dpkg --print-architecture)" \
+    && base="https://github.com/cli/cli/releases/download/v${GH_VERSION}" \
+    && tarball="gh_${GH_VERSION}_linux_${arch}.tar.gz" \
+    && cd /tmp \
+    && curl -fsSLO "${base}/${tarball}" \
+    && curl -fsSL "${base}/gh_${GH_VERSION}_checksums.txt" | grep -F "  ${tarball}" | sha256sum -c - \
+    && tar -xzf "${tarball}" --strip-components=1 -C /usr/local "gh_${GH_VERSION}_linux_${arch}/bin/gh" \
+    && rm -f "${tarball}"
+
+# --- Users -----------------------------------------------------------------
+# The image runs as ROOT by default (ADR-008): under rootless Podman, container
+# root maps to the host user, so bind mounts are writable and files created
+# there stay yours on the host — and `apt`/system installs work inside the
+# container, which is the point of the root default.
 #
-# HOST_UID defaults to 501 — the typical first-user UID on macOS, which is what
-# Podman passes through to bind mounts on this host. `coder` MUST match the UID
-# the mounts appear as inside the container (verified with `ls -ldn /xpal-auth`
-# = 501 here), or it can't write to them. The bind-mounted dirs grant write to
-# their owner, so matching the UID is what matters. If your host UID differs
-# (check with `id -u`), override at build time:
-#   podman build --build-arg HOST_UID=$(id -u) -t xpal-claudia .
-ARG HOST_UID=501
-RUN useradd -m -s /usr/bin/zsh -u "${HOST_UID}" coder
+# `coder` is an opt-in fallback for tools that refuse to run as root (launch
+# with XPAL_AS_CODER=1, see containerconf/README.md). Its UID is fixed, not the
+# host's: the run scripts map the host user onto it with
+# --userns=keep-id:uid=<CODER_UID>,gid=<CODER_UID> in that mode only.
+ARG CODER_UID
+RUN : "${CODER_UID:?}" \
+    && useradd -m -s /usr/bin/zsh -u "${CODER_UID}" coder \
+    && touch /home/coder/.zshrc \
+    && chown coder:coder /home/coder/.zshrc
 
 # --- Mount points ---------------------------------------------------------
 # Host folders (chosen by containerconf/setup.sh on each machine) mount here:
 #   <host code dir> -> /xpal-src   (code)
 #   <host data dir> -> /xpal-data  (data)
 #   <host auth dir> -> /xpal-auth  (all credentials — see below)
-RUN mkdir -p /xpal-src /xpal-data /xpal-auth \
-    && chown coder:coder /xpal-src /xpal-data /xpal-auth
+RUN mkdir -p /xpal-src /xpal-data /xpal-auth
 
 # --- Authentication redirection ------------------------------------------
 # Point every credential-writing tool at /xpal-auth so nothing sensitive
@@ -38,38 +71,101 @@ ENV CLAUDE_CONFIG_DIR=/xpal-auth/claude
 ENV GIT_CONFIG_GLOBAL=/xpal-auth/git/gitconfig
 ENV NPM_CONFIG_USERCONFIG=/xpal-auth/npm/npmrc
 
-# Set HOME explicitly. A RUN after `USER coder` does NOT inherit /home/coder as
-# HOME automatically, so oh-my-zsh, uv, etc. would otherwise install to /.
-ENV HOME=/home/coder
+# Several projects default their data dir to $HOME/xpal-data, which would be
+# container-local (/root/xpal-data) instead of the persistent mount.
+ENV XPAL_DATA=/xpal-data
 
-# uv installs its binaries to ~/.local/bin and uv-managed tools (like ipython)
-# to ~/.local/bin as well; put both on PATH for all shells.
-ENV PATH=/home/coder/.local/bin:$PATH
+# uv installs its binaries to ~/.local/bin (= /root/.local/bin as root) and
+# uv-managed tools (like ipython) there too; put it on PATH for all shells.
+# HOME is deliberately NOT set here: it follows the running user (/root, or
+# /home/coder under XPAL_AS_CODER), so a `--user coder` run gets its own home.
+ENV PATH=/root/.local/bin:$PATH
+
+# Install oh-my-zsh unattended, pinned to a commit. The upstream installer can
+# only clone a branch, so do what it does by hand at an exact SHA: fetch the
+# commit, check it out, and start from the shipped .zshrc template. Updates are
+# disabled — the pin is the update mechanism.
+ARG OH_MY_ZSH_REF
+RUN : "${OH_MY_ZSH_REF:?}" \
+    && git init -q "$HOME/.oh-my-zsh" \
+    && cd "$HOME/.oh-my-zsh" \
+    && git remote add origin https://github.com/ohmyzsh/ohmyzsh.git \
+    && git fetch -q --depth 1 origin "${OH_MY_ZSH_REF}" \
+    && git checkout -q FETCH_HEAD \
+    && { echo "zstyle ':omz:update' mode disabled"; cat templates/zshrc.zsh-template; } > "$HOME/.zshrc"
+
+# --- Python toolchain (uv-owned) -----------------------------------------
+# Install uv via the standalone installer at a pinned version (no pre-existing
+# Python needed, and it sidesteps Debian's externally-managed-environment
+# restriction). uv then owns Python entirely — there is intentionally no apt
+# python3.
+ARG UV_VERSION
+RUN : "${UV_VERSION:?}" \
+    && curl -fsSL "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
+
+# Install a managed CPython, and expose bare `python`/`python3` on PATH so the
+# interpreter is usable directly, not only via `uv run`.
+ARG PYTHON_VERSION
+RUN : "${PYTHON_VERSION:?}" && uv python install --default "${PYTHON_VERSION}"
+
+# Install IPython as a uv-managed tool (isolated, on PATH as `ipython`).
+ARG IPYTHON_VERSION
+RUN : "${IPYTHON_VERSION:?}" && uv tool install "ipython==${IPYTHON_VERSION}"
+
+# --- ophio: drive the host's Chrome from inside the container -------------
+# ophio speaks the DevTools Protocol to a Chrome running on the HOST, so it
+# needs only playwright-core — no Chromium download, no GUI system libraries.
+# Installing it takes about a second.
+#
+# It is installed by entrypoint.sh at container start, NOT here, because
+# hackergram/ophio is private and an image build has no credentials. By
+# entrypoint time /xpal-src is mounted, so the source is simply there. The
+# install is idempotent and checksum-skipped, so a normal start pays nothing.
+#
+# As root, ophio's installer targets /usr/local (as non-root: ~/.local);
+# entrypoint.sh mirrors that rule. It must run after `uv python install`
+# above — its shim needs a python3 on PATH, and this image has no apt python3.
+#
+# `claudia` is installed the same way (editable, from the mounted source) so
+# the prepare-commit-msg hook can record the Model: trailer.
+
+# Where ophio looks for the host's Chrome. Override per run with
+# `-e OPHIO_CDP_URL=http://host.docker.internal:9222` (Docker Desktop) or a
+# forwarded address on a Linux host — see ophio's docs/host-chrome.md.
+ENV OPHIO_CDP_URL=http://host.containers.internal:9222
+# Where entrypoint.sh looks for the ophio source; defaults to a scan of
+# /xpal-src/*/ophio when unset.
+ENV OPHIO_SRC=""
+
+# --- Record what this build actually contains -----------------------------
+# build.sh prints /etc/xpal-versions after every build; the full dpkg list
+# (the apt packages are unpinned, so this is how you know what you got) is in
+# /etc/xpal-apt-manifest. Stays tolerant: a tool that can't report a version
+# shows up as such rather than failing the build.
+RUN { \
+      . /etc/os-release; echo "debian=${VERSION_ID}"; \
+      echo "node=$(node --version)"; \
+      echo "npm=$(npm --version)"; \
+      echo "claude-code=$(claude --version 2>&1 | head -1)"; \
+      echo "opencode=$(opencode --version 2>&1 | head -1)"; \
+      echo "gh=$(gh --version | head -1)"; \
+      echo "uv=$(uv --version)"; \
+      echo "python=$(python --version 2>&1)"; \
+      echo "ipython=$(ipython --version)"; \
+      echo "git=$(git --version)"; \
+      echo "ripgrep=$(rg --version | head -1)"; \
+      echo "jq=$(jq --version)"; \
+      echo "oh-my-zsh=$(git -C "$HOME/.oh-my-zsh" rev-parse HEAD)"; \
+    } > /etc/xpal-versions \
+    && dpkg-query -W -f='${Package}=${Version}\n' | sort > /etc/xpal-apt-manifest
 
 # Entrypoint handles runtime auth-dir setup (must happen after the mount exists).
+# Copied last so editing it rebuilds only this layer, not the installs above.
 # --chmod=755 sets the executable bit at copy time, so it works even if the
 # source file arrived without +x (e.g. downloaded through a browser).
 COPY --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
-USER coder
 WORKDIR /xpal-src
-
-# Install oh-my-zsh unattended: --unattended skips the chsh prompt and does not
-# try to launch zsh at the end (both would break a non-interactive build).
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-
-# --- Python toolchain (uv-owned) -----------------------------------------
-# Install uv via the standalone installer (no pre-existing Python needed, and
-# it sidesteps Debian's externally-managed-environment restriction). uv then
-# owns Python entirely — there is intentionally no apt python3.
-RUN curl -fsSL https://astral.sh/uv/install.sh | sh
-
-# Install a managed CPython, and expose bare `python`/`python3` on PATH so the
-# interpreter is usable directly, not only via `uv run`.
-RUN uv python install --default
-
-# Install IPython as a uv-managed tool (isolated, on PATH as `ipython`).
-RUN uv tool install ipython
 
 # Init auth dirs (via entrypoint), then drop into zsh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,6 +1,8 @@
 # ADR-004: Guided, per-machine setup via a generated config file
 
-**Status:** Accepted
+**Status:** Accepted — the host-UID plumbing (`XPAL_HOST_UID`, `HOST_UID`,
+`--userns=keep-id`) described below is superseded by ADR-008; the generated-`.env`
+approach still stands.
 
 ## Context
 

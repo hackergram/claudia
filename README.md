@@ -38,7 +38,8 @@ claudia --since 2026-07-01 --by week # weekly totals since July
 claudia --env --cost                 # impact + cost breakdown
 claudia --snapshot && claudia --install-cron   # keep daily snapshots
 
-# container dev environment
+# container dev environment (upgrading Podman? see "After a Podman upgrade"
+# in containerconf/README.md)
 cd containerconf && ./setup.sh && ./build.sh && ./run-daily.sh
 
 # tag commits with their producing agent

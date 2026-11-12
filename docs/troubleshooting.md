@@ -72,18 +72,21 @@ cache/output/input split.
 
 ### Permission errors on the mounted folders
 
-The container's `coder` user must map to your host UID. Both run scripts set
-`--userns=keep-id`; if that isn't in effect, re-create the container. Confirm
-`.env` has the right UID:
+By default the container runs as root, which under **rootless Podman** maps to
+your host user, so the mounts should be writable with no extra flags (ADR-008).
+If you get permission errors:
 
-```bash
-grep XPAL_HOST_UID containerconf/.env   # should match id -u
-./setup.sh                              # fix and recreate
-```
-
-`--userns=keep-id` works with rootless Podman; with plain Docker or on some
-macOS setups you may instead need to pass `-u $(id -u):$(id -g)` to the run
-command.
+- **Check the runtime is rootless Podman** (`podman info | grep -i rootless`
+  should say `true`). With rootful Podman or Docker, container root is real
+  host root: it can write the mounts, but files it creates are root-owned on the
+  host. This setup is not meant for a rootful runtime.
+- **Running as `coder`** (`XPAL_AS_CODER=1`)? The run scripts must have added
+  `--userns=keep-id:uid=1000,gid=1000`; a container created without it can't
+  write the mounts. Remove it (`./cleanup.sh`) and recreate with
+  `XPAL_AS_CODER=1 ./run-daily.sh`. The user is chosen when the container is
+  created, so changing the variable later has no effect on an existing one.
+- A container created **before** the root-default change still has the old
+  user and flags until it is recreated (`./build.sh` offers to).
 
 ### Can't reach the container by IP
 
