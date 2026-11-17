@@ -14,6 +14,7 @@ commit with the coding agent that produced it.
 | [container-env.md](container-env.md) | The containerized Claude Code + OpenCode dev environment: setup, build, run tracks, auth, ports |
 | [agent-tagging.md](agent-tagging.md) | The `Coding-Agent:` and `Model:` commit trailers and their `prepare-commit-msg` hook |
 | [troubleshooting.md](troubleshooting.md) | Common problems and fixes for the CLI, container, and hook |
+| [best-practices.md](best-practices.md) | Working conventions for dev runs, starting with: end every run on something a human can test |
 | [filing-issues.md](filing-issues.md) | How to report issues and the contributor workflow (ADR → Issue → Todo → branch → PR) |
 
 ## Quick start

@@ -28,6 +28,7 @@ claudia/
 │   ├── container-env.md     # Containerized dev environment
 │   ├── agent-tagging.md     # Coding-Agent commit trailers
 │   ├── troubleshooting.md   # Common problems and fixes
+│   ├── best-practices.md    # Working conventions for dev runs
 │   ├── filing-issues.md     # How to file issues + contribute
 │   └── decisions/           # ADRs — read before changing core approach
 │       ├── ADR-001-local-jsonl-parsing.md
@@ -85,6 +86,15 @@ cross-repo or multi-machine phases, use a GitHub Project board. Full guidance:
   first. Sweep the open list at each release, CHANGELOG entry, or phase end.
 
 Full guidance: `docs/filing-issues.md` → "Closing issues".
+
+## Ending a dev run
+
+**Always end a dev run on something a human can test.** Finish with a *try it*
+block — the exact commands, what must be running first, what to expect, what was
+verified versus not run, and how to clean up. If the real environment is
+unavailable, end on the written-but-unrun test and the one step that unblocks
+it; never report unrun work as verified. Full guidance:
+`docs/best-practices.md`.
 
 ## Coding standards
 
