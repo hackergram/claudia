@@ -27,7 +27,7 @@ REMOTE_DIR="${1:-${XPAL_REMOTE:-${XPAL_HOST_REMOTE_DIR:-}}}"
 MOUNTS=(
   -v "$XPAL_HOST_SRC":/xpal-src:Z
   -v "$XPAL_HOST_DATA":/xpal-data:Z
-  -v "$XPAL_HOST_AUTH":/xpal-auth:Z
+  -v "$XPAL_HOST_AUTH":/xpal-auth:z
 )
 
 # Conditionally add the remote mount only when a path was supplied.

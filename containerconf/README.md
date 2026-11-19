@@ -117,12 +117,94 @@ the Containerfile, so they persist on the host and never enter the image:
   identity once (persists): `git config --global user.name "..."` and
   `user.email "..."`.
 - **npm** — `NPM_CONFIG_USERCONFIG=/xpal-auth/npm/npmrc`.
+- **Remote MCP servers** — `MCP_REMOTE_CONFIG_DIR=/xpal-auth/mcp-remote` holds
+  mcp-remote's OAuth tokens; server definitions live in
+  `/xpal-auth/mcp/servers.json`. See [Remote MCP servers](#remote-mcp-servers-oauth-via-mcp-remote).
 
 For SSH-based git, add a fourth mount onto the standard path, e.g.
 `-v ~/xpal-auth/ssh:/home/coder/.ssh:Z`.
 
 **Never commit credentials.** The `.gitignore` excludes common secret files;
 credentials live in the mounted host folder, not the repo or the image.
+
+## Remote MCP servers (OAuth via mcp-remote)
+
+> Step-by-step user guide: `docs/mcp-connectors.md`. Design rationale:
+> `docs/decisions/ADR-010-container-mcp-oauth-relay.md`.
+
+Claude Code in the container can use remote MCP servers that sign in with
+OAuth — the kind a Claude Desktop config reaches through
+`npx mcp-remote <url> <callback-port> ...`. The image ships `mcp-remote`
+(pinned via `MCP_REMOTE_VERSION` in the Containerfile) and keeps its tokens in
+`/xpal-auth/mcp-remote`, so like every other credential they live on the host
+and survive rebuilds.
+
+**1. Describe the server** in `$XPAL_HOST_AUTH/mcp/servers.json`. It uses the
+same `{"mcpServers": {...}}` shape as a Claude Desktop config, so an entry can
+be pasted across unchanged — a host path to `npx` and any host `PATH` override
+are normalized away, and an entry without a callback port uses the one
+mcp-remote derives from its URL. See `mcp-servers.example.json` for the shape. The file stays on the host, outside git: it can carry OAuth client
+details.
+
+```bash
+mkdir -p "$XPAL_HOST_AUTH/mcp" && $EDITOR "$XPAL_HOST_AUTH/mcp/servers.json"
+```
+
+How the entry is written decides where mcp-remote comes from:
+
+| Entry | mcp-remote comes from | Trade-off |
+|---|---|---|
+| `"command": "mcp-remote"` | the copy baked into the image | no network or download at launch; changing version = rebuild |
+| `"command": "npx"`, args `"-y", "mcp-remote@<version>", ...` (a pasted Desktop entry) | fetched by npx at runtime into `~/.npm/_npx` | version change = edit `servers.json` only; first launch in each new container downloads it (needs npm registry access, slower first start) |
+
+`npx` ships with Node.js, so it is always available — nothing to install.
+Pin the version (`mcp-remote@0.15.1`, not bare `mcp-remote`); `mcp-login` warns
+if you don't. If every entry uses npx, set `MCP_REMOTE_VERSION` empty in the
+Containerfile to drop the preinstall. After editing an entry (switching forms
+included), re-run `./mcp-login.sh <name>`: it replaces the registration.
+
+**2. Sign in once** (if the image predates this section, `./build.sh` first):
+
+```bash
+./mcp-login.sh <name>        # <name> = a key under "mcpServers"
+```
+
+This starts a throwaway container that publishes only that server's callback
+port, on host loopback. mcp-remote prints an authorization URL — open it in a
+browser on the host and sign in. The OAuth server redirects the browser to
+`http://localhost:<callback-port>/...`, which reaches mcp-remote inside the
+container. The tokens are written to `$XPAL_HOST_AUTH/mcp-remote`, the
+connection is tested (the server's tools are listed), and the server is
+registered with Claude Code at user scope (stored in `$CLAUDE_CONFIG_DIR`, so
+it persists too), or its registration is updated if the entry changed. The
+sign-in gives up after 10 minutes (`MCP_LOGIN_TIMEOUT=<seconds>` to change).
+
+**3. Use it.** In the day-to-day container, start `claude`; `/mcp` lists the
+server. Claude Code launches `mcp-remote` itself, which reads the shared tokens
+and refreshes them silently. No recreate is needed — the day-to-day container
+mounts the same `/xpal-auth`. (An existing day-to-day container does need one
+recreate after the rebuild in step 2, to get `mcp-remote` and
+`MCP_REMOTE_CONFIG_DIR`.)
+
+When the refresh token eventually expires, the server shows as failed in
+`/mcp`: re-run `./mcp-login.sh <name>`, then reconnect from `/mcp`.
+
+**Why a relay.** mcp-remote's OAuth callback server binds `127.0.0.1` only
+(hard-coded), and a published container port delivers traffic to the
+container's network interface, not its loopback — publishing the port alone
+never delivers the redirect. `mcp-login` runs `socat` on callback-port + 1 (all
+interfaces) forwarding to `127.0.0.1:<callback-port>`, and `mcp-login.sh`
+publishes host `<callback-port>` to container `<callback-port + 1>`. The
+redirect URI the OAuth server has registered is unchanged.
+
+**Why a separate container.** The day-to-day container's ports are fixed at
+creation, and keeping the callback port published there would stop other apps
+on the host (e.g. Claude Desktop's own mcp-remote) from binding it when they
+need to sign in.
+
+If a server's OAuth client allows the device grant, adding `--device-code` to
+its args skips the callback entirely. Many clients have it disabled even when
+the authorization server advertises it.
 
 ## Tracking hand-installed dependencies
 
@@ -158,6 +240,8 @@ containers use `--rm` and need no cleanup.
 - zsh + oh-my-zsh (default shell)
 - Claude Code (`@anthropic-ai/claude-code`) — run with `claude`
 - OpenCode (`opencode-ai`) — run with `opencode`
+- `mcp-remote` (pinned) and `socat`, plus the `mcp-login` helper — remote
+  OAuth MCP servers, see above
 - Python toolchain: `uv` (owns Python — no apt python3), a uv-managed CPython
   exposed as `python`/`python3`, and `ipython` as a uv tool
 - A non-root `coder` user

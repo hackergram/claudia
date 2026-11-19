@@ -22,6 +22,9 @@ containerconf/
 ├── run-daily.sh       # long-lived "day-to-day" container
 ├── run-daily-remote.sh# day-to-day + a remote (SharePoint) mount
 ├── run-ephemeral.sh   # throwaway --rm container, optional per-run remote
+├── mcp-login.sh       # OAuth sign-in for a remote MCP server (throwaway container)
+├── mcp-login-container.sh   # in-image helper behind it (/usr/local/bin/mcp-login)
+├── mcp-servers.example.json # shape of $XPAL_HOST_AUTH/mcp/servers.json
 └── cleanup.sh         # remove day-to-day container + prune dangling images
 ```
 
@@ -109,9 +112,31 @@ Containerfile, so they persist on the host and never enter the image:
   a credential helper storing tokens to `/xpal-auth/git/git-credentials`. Set
   your identity once: `git config --global user.name "..."`, `user.email "..."`.
 - **npm** — `NPM_CONFIG_USERCONFIG=/xpal-auth/npm/npmrc`.
+- **Remote MCP servers** — `MCP_REMOTE_CONFIG_DIR=/xpal-auth/mcp-remote` (see
+  below).
 
 For SSH-based git, add a fourth mount onto the standard path
 (`-v ~/xpal-auth/ssh:/home/coder/.ssh:Z`).
+
+## Remote MCP servers
+
+Remote OAuth MCP servers — the kind a Claude Desktop config runs through
+`npx mcp-remote <url> <callback-port> ...` — work from Claude Code in the
+container:
+
+```bash
+mkdir -p "$XPAL_HOST_AUTH/mcp"
+$EDITOR "$XPAL_HOST_AUTH/mcp/servers.json"   # paste the Desktop "mcpServers" entry
+./build.sh                                   # once: image gains mcp-remote + socat
+./mcp-login.sh <name>                        # open the printed URL on the host, sign in
+./run-daily.sh                               # claude -> /mcp shows the server
+```
+
+`mcp-login.sh` signs in through a throwaway container that publishes only the
+server's callback port (relayed past mcp-remote's loopback-only callback
+listener), stores the tokens in `$XPAL_HOST_AUTH/mcp-remote`, and registers the
+server with Claude Code at user scope. Step-by-step guide:
+[mcp-connectors.md](mcp-connectors.md); design: [ADR-010](decisions/ADR-010-container-mcp-oauth-relay.md).
 
 ## Ports
 
@@ -149,6 +174,7 @@ git. Ephemeral containers use `--rm` and need no cleanup.
 - Node.js 20 LTS, `git`, `ripgrep`
 - zsh + oh-my-zsh (default shell)
 - Claude Code (`claude`) and OpenCode (`opencode`)
+- `mcp-remote` (pinned) + `socat`, and the `mcp-login` helper
 - Python via `uv` (uv-managed CPython exposed as `python`/`python3`, plus
   `ipython` as a uv tool) — no apt python3
 - A non-root `coder` user

@@ -99,6 +99,46 @@ set the library/folder to "Always keep on this device". If the library isn't
 synced locally at all, a bind mount can't reach it (you'd need `rclone` inside
 the container).
 
+### Remote MCP sign-in: browser can't reach the redirect
+
+After you sign in, the browser lands on `http://localhost:<callback-port>/...`
+and must reach mcp-remote inside a container:
+
+- Sign in with `containerconf/mcp-login.sh <name>`, not by running mcp-remote
+  in the day-to-day container — that container doesn't publish the callback
+  port, and mcp-remote's callback listener is loopback-only, so it needs the
+  relay `mcp-login` sets up.
+- If the browser tried IPv6 and was refused, change `localhost` to `127.0.0.1`
+  in the failed URL and reload promptly — the authorization code is short-lived.
+
+### `Port <N> is already in use` from `mcp-login.sh`
+
+Something on the host holds the callback port, on `127.0.0.1` or `::1` —
+usually Claude Desktop's own mcp-remote in the middle of a sign-in. Finish or
+quit it, then retry. Podman's `bind: address already in use` during a sign-in
+has the same cause.
+
+### `mcp-login: gave up after 600s waiting for "<name>"`
+
+The browser sign-in wasn't completed in time. Run `mcp-login.sh` again and
+open the new URL; `MCP_LOGIN_TIMEOUT=<seconds> ./mcp-login.sh <name>` allows
+longer.
+
+### `registering "<name>" with Claude Code failed: ... does not hold the new definition`
+
+`claude mcp add-json` reports success even when it can't write its config, so
+`mcp-login` checks the file afterwards. Make sure `$XPAL_HOST_AUTH/claude` is
+writable by the container user (the UID match described in
+[container-env.md](container-env.md)).
+
+### Remote MCP server shows as failed in `/mcp` after working for a while
+
+Its refresh token expired (or was revoked). Re-run
+`containerconf/mcp-login.sh <name>`, then reconnect from `/mcp`. Changing the
+server's URL or adding `--resource`/`--header`/authorize params in
+`servers.json` also needs a fresh sign-in — mcp-remote keys its token cache on
+them.
+
 ### Rebuilt the image but the container is unchanged
 
 A container is pinned to the image it was created from. `./build.sh` offers to

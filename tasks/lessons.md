@@ -54,3 +54,61 @@
   returned `unknown` when the live JSONL clearly had the data. Worth periodically sanity
   checking claudia's own commands actually see data in whatever environment they're
   supposedly supported in, rather than trusting that passing tests means it works live.
+
+## 2026-11-17 — Remote MCP (mcp-remote) inside the container
+
+- **mcp-remote's OAuth callback is loopback-only.** 0.15.1 hard-codes
+  `app.listen(port, "127.0.0.1")` with no flag to change it, and a published
+  container port delivers to the container's interface, not its loopback — so
+  `-p <port>:<port>` alone never delivers the browser redirect. Fix: socat on
+  port+1 (all interfaces) → `127.0.0.1:<port>`, publish host `<port>` →
+  container `<port+1>`; the registered redirect URI is unchanged.
+- **Verified the relay is required, not just theoretically.** Podman 6.2 on
+  macOS (libkrun VM, rootless, netavark + pasta): a server bound to
+  `127.0.0.1` in the container answers inside (HTTP 200) but the published
+  port gives the host an empty reply (curl exit 52). Through the socat relay
+  the same path works, and a full `mcp-login` sign-in completed.
+- **Token cache is portable between host and container.** File is
+  `$MCP_REMOTE_CONFIG_DIR/mcp-remote-v1/<md5>_tokens.json`, md5 over the server
+  URL (+ `--resource`, headers, authorize params, client-metadata URL, token
+  endpoint if given). Same args → same file; changing any of those forces a new
+  sign-in.
+- **Keycloak advertises the device grant realm-wide but enables it per
+  client.** `device_authorization_endpoint` in the realm metadata proves
+  nothing; POST `client_id=<id>` to it — `unauthorized_client` means
+  `--device-code` won't work for that client.
+- **`mcp-remote-client` quits on stdin EOF.** It treats stdin `end` like
+  SIGINT: shuts down with exit 0 right after connecting, before the tools list
+  arrives. Run it with a TTY (`-it`) or with stdin held open, or a "passing"
+  smoke test proves only that it connected.
+- **The callback server starts lazily** (only when a sign-in is needed), and
+  `waitForAuthCode` has no timeout; `--auth-timeout` (30 s) only bounds the
+  long-poll and the post-callback token exchange.
+
+## 2026-11-19 — PR #28 review follow-ups (mcp-login)
+
+- **`claude mcp add-json` exits 0 when it can't write.** With an unwritable
+  `$CLAUDE_CONFIG_DIR` it still prints "Added stdio MCP server ..." and exits
+  0, writing nothing. Check the config file afterwards (user scope:
+  `mcpServers` in `$CLAUDE_CONFIG_DIR/.claude.json`).
+- **mcp-remote 0.15.1 derives a missing callback port deterministically:**
+  `3335 + parseInt(md5(url|resource|params|headers|...)[0:4], 16) % 45816`,
+  no free-port search. Its parser also removes `--header`/`--header-file`
+  pairs before reading the URL and port, so those may precede the URL. Without
+  static client info it deletes a cached registration whose redirect URI
+  doesn't match, so the sign-in must use the exact port the runtime will.
+  `parseCommandLineArgs` is exported from the bundled chunk that `client.js`
+  imports, so mcp-login calls it instead of copying the hash.
+- **`mcp-remote-client` exits by itself** after listing tools and resources
+  ("Exiting OK..."). Its SIGINT and stdin-end handlers are installed only
+  after connecting, and both exit 0; before connecting, Ctrl-C kills it
+  (status 130).
+- **`timeout --foreground` is needed for Ctrl-C.** Without it, `timeout` moves
+  to its own process group, so a terminal Ctrl-C never reaches the client.
+- **`:Z` on a shared host folder is a trap on SELinux hosts.** It relabels the
+  folder privately for the newest container, cutting off any running
+  container that mounts it. Use `:z` for folders several containers share.
+- **Podman exit codes for a throwaway container:** 125 for runtime errors such
+  as a bad mount, 127 for a missing command, and 126 also for attach-phase
+  failures (a busy published port gave 126 on Podman 6.2 for macOS). A
+  `podman run --rm` start costs ~0.2 s on that machine.

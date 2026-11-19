@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "example-remote": {
+      "command": "mcp-remote",
+      "args": [
+        "https://mcp.example.com/mcp",
+        "3334",
+        "--callback-path",
+        "/callback",
+        "--static-oauth-client-info",
+        "{\"client_id\": \"your-client-id\"}"
+      ]
+    }
+  }
+}

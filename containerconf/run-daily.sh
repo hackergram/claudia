@@ -29,5 +29,5 @@ exec "$XPAL_RUNTIME" run -it --name "$CONTAINER" \
   "${PORT_ARGS[@]}" \
   -v "$XPAL_HOST_SRC":/xpal-src:Z \
   -v "$XPAL_HOST_DATA":/xpal-data:Z \
-  -v "$XPAL_HOST_AUTH":/xpal-auth:Z \
+  -v "$XPAL_HOST_AUTH":/xpal-auth:z \
   "$IMAGE"

@@ -1,15 +1,29 @@
 # Base image — Debian 12 "bookworm", slim variant (no docs/extras)
 FROM docker.io/library/debian:bookworm-slim
 
-# Install Node.js 20 LTS, the tools Claude Code wants, and zsh
+# Install Node.js 20 LTS, the tools Claude Code wants, and zsh.
+# socat relays the mcp-remote OAuth callback into the container (mcp-login).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl ca-certificates git ripgrep zsh \
+        curl ca-certificates git ripgrep zsh socat \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @anthropic-ai/claude-code opencode-ai \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# mcp-remote bridges stdio-only MCP clients to remote OAuth MCP servers (the
+# same proxy a Claude Desktop config runs via npx). Pinned so every container
+# — and the tokens it writes — behaves the same; bump deliberately.
+# Used by servers.json entries with "command": "mcp-remote". Set it empty to
+# skip the preinstall if every entry uses npx instead (fetched at runtime;
+# npx itself ships with Node.js, so nothing extra is needed for that).
+# Its own layer, declared after the toolchain layer: a bad version fails only
+# this step, and bumping it leaves the toolchain layer cached.
+ARG MCP_REMOTE_VERSION=0.15.1
+RUN if [ -n "${MCP_REMOTE_VERSION}" ]; then \
+        npm install -g "mcp-remote@${MCP_REMOTE_VERSION}"; \
+    fi
 
 # Create a non-root user with zsh as the login shell.
 #
@@ -37,6 +51,9 @@ RUN mkdir -p /xpal-src /xpal-data /xpal-auth \
 ENV CLAUDE_CONFIG_DIR=/xpal-auth/claude
 ENV GIT_CONFIG_GLOBAL=/xpal-auth/git/gitconfig
 ENV NPM_CONFIG_USERCONFIG=/xpal-auth/npm/npmrc
+# mcp-remote OAuth tokens (remote MCP servers). Server definitions for
+# mcp-login live alongside, in /xpal-auth/mcp/servers.json.
+ENV MCP_REMOTE_CONFIG_DIR=/xpal-auth/mcp-remote
 
 # Set HOME explicitly. A RUN after `USER coder` does NOT inherit /home/coder as
 # HOME automatically, so oh-my-zsh, uv, etc. would otherwise install to /.
@@ -50,6 +67,9 @@ ENV PATH=/home/coder/.local/bin:$PATH
 # --chmod=755 sets the executable bit at copy time, so it works even if the
 # source file arrived without +x (e.g. downloaded through a browser).
 COPY --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# Remote-MCP sign-in helper, driven from the host by containerconf/mcp-login.sh.
+COPY --chmod=755 mcp-login-container.sh /usr/local/bin/mcp-login
 
 USER coder
 WORKDIR /xpal-src

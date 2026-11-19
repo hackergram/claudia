@@ -7,7 +7,8 @@ set -e
 # created after the mount exists — i.e. now, at container start. Creating them
 # at build time would be pointless: the runtime mount masks anything the image
 # baked into this path.
-mkdir -p /xpal-auth/claude /xpal-auth/git /xpal-auth/npm
+mkdir -p /xpal-auth/claude /xpal-auth/git /xpal-auth/npm \
+         /xpal-auth/mcp /xpal-auth/mcp-remote
 
 # Point git's credential store at the mounted auth dir (idempotent — safe to
 # run on every start). Writes to $GIT_CONFIG_GLOBAL, which lives in the mount,

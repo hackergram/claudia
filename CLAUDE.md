@@ -26,6 +26,7 @@ claudia/
 │   ├── installation.md      # Install CLI, container env, git hook
 │   ├── usage.md             # Full CLI reference
 │   ├── container-env.md     # Containerized dev environment
+│   ├── mcp-connectors.md    # Remote OAuth MCP servers in the container
 │   ├── agent-tagging.md     # Coding-Agent commit trailers
 │   ├── troubleshooting.md   # Common problems and fixes
 │   ├── filing-issues.md     # How to file issues + contribute
@@ -36,7 +37,8 @@ claudia/
 │       ├── ADR-004-guided-portable-setup.md
 │       ├── ADR-005-agent-git-trailers.md
 │       ├── ADR-006-coder-session-index.md
-│       └── ADR-007-agent-model-trailer.md
+│       ├── ADR-007-agent-model-trailer.md
+│       └── ADR-010-container-mcp-oauth-relay.md
 ├── tasks/
 │   ├── todo.md              # Current and upcoming work
 │   └── lessons.md           # Dated discoveries and gotchas
@@ -132,6 +134,9 @@ API integration approach. Key decisions:
 - ADR-003: Anthropic Admin API for cross-verification
 - ADR-006: Coder session index (`claudia index`) — agent-agnostic per-session
   token ledger; read it before touching the ledger schema or counting logic
+- ADR-010: Remote OAuth MCP servers in the container — pinned mcp-remote,
+  tokens in `/xpal-auth`, sign-in via `containerconf/mcp-login.sh` and a socat
+  relay (mcp-remote's callback is loopback-only)
 
 ### Chat loop workflow for ADR decisions
 
